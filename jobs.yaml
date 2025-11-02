@@ -87,7 +87,6 @@ cronjob:
       - name: stock/quotes/ggt_top10
       - name: stock/quotes/ggt_daily
       - name: stock/quotes/bak_daily
-      - name: stock/quotes/stk_mins
       - name: stock/quotes/stk_weekly_monthly
       - name: stock/limit/dc_hot
       - name: stock/limit/hm_detail
