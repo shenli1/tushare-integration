@@ -2,6 +2,7 @@ import datetime
 
 import pandas as pd
 
+from tushare_integration.constants import DEFAULT_START_DATE
 from tushare_integration.items import TushareIntegrationItem
 from tushare_integration.spiders.stock.quotes import StockMonthlySpider, StockWeeklySpider
 from tushare_integration.spiders.tushare import DailySpider, TushareSpider
@@ -79,7 +80,7 @@ class IndexWeightSpider(DailySpider):
     }
 
     def start_requests(self):
-        min_cal_date = self.custom_settings.get("MIN_CAL_DATE", '1970-01-01')
+        min_cal_date = self.custom_settings.get("MIN_CAL_DATE", DEFAULT_START_DATE)
         conn = self.get_db_engine()
         db_name = self.spider_settings.database.db_name
 

@@ -31,7 +31,7 @@ class BasePipeline(object):
     def from_crawler(cls, crawler):
         return cls(
             settings=TushareIntegrationSettings.model_validate(
-                yaml.safe_load(open('config.yaml', 'r', encoding='utf8').read())
+                yaml.safe_load(open('config_prod.yaml', 'r', encoding='utf8').read())
             )
         )
 

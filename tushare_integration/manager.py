@@ -1,5 +1,6 @@
 import itertools
 import logging
+import os
 import re
 import signal
 import uuid
@@ -18,7 +19,7 @@ class CrawlManager(object):
     def __init__(self):
         self.batch_id = uuid.uuid1().hex
         self.settings = TushareIntegrationSettings.model_validate(
-            yaml.safe_load(open('config.yaml', 'r', encoding='utf8').read())
+            yaml.safe_load(open('config_prod.yaml', 'r', encoding='utf8').read())
         )
 
         self.process = scrapy.crawler.CrawlerProcess(self.get_settings())
@@ -56,12 +57,55 @@ class CrawlManager(object):
         return settings
 
     @staticmethod
+    def _resolve_dependency_name(dep_name: str) -> str:
+        """
+        将简短依赖名称（如 'trade_cal'）解析为完整路径（如 'stock/basic/trade_cal'）
+        如果已经是完整路径，则直接返回
+        """
+        # 如果已经包含路径分隔符，说明是完整路径
+        if '/' in dep_name:
+            return dep_name
+        
+        # 简短名称，需要在 schema 目录中查找
+        schema_dir = "tushare_integration/schema"
+        target_file = f"{dep_name}.yaml"
+        
+        # 遍历 schema 目录查找匹配的文件
+        for root, dirs, files in os.walk(schema_dir):
+            if target_file in files:
+                # 找到文件，转换为相对路径（相对于 schema_dir）
+                file_path = os.path.join(root, target_file)
+                rel_path = os.path.relpath(file_path, schema_dir)
+                # 移除 .yaml 扩展名，返回完整路径
+                return rel_path[:-5] if rel_path.endswith('.yaml') else rel_path
+        
+        # 如果找不到，返回原名称（后续可能会失败，但至少不会在这里中断）
+        logging.warning(f"Could not resolve dependency name '{dep_name}' to full path")
+        return dep_name
+
+    @staticmethod
     def get_dependencies(spiders: list[str]) -> list[str]:
         dependencies = []
         for spider in spiders:
-            with open(f"tushare_integration/schema/{spider}.yaml", 'r', encoding='utf8') as f:
-                schema = yaml.safe_load(f.read())
-            dependencies.extend(schema.get('dependencies', []))
+            try:
+                # 先尝试直接打开（假设是完整路径）
+                schema_path = f"tushare_integration/schema/{spider}.yaml"
+                if not os.path.exists(schema_path):
+                    # 如果文件不存在，尝试解析 spider 名称
+                    resolved_spider = CrawlManager._resolve_dependency_name(spider)
+                    schema_path = f"tushare_integration/schema/{resolved_spider}.yaml"
+                
+                if os.path.exists(schema_path):
+                    with open(schema_path, 'r', encoding='utf8') as f:
+                        schema = yaml.safe_load(f.read())
+                    deps = schema.get('dependencies', [])
+                    # 解析所有依赖项为完整路径
+                    resolved_deps = [CrawlManager._resolve_dependency_name(dep) for dep in deps]
+                    dependencies.extend(resolved_deps)
+                else:
+                    logging.warning(f"Schema file not found for spider: {spider}")
+            except Exception as e:
+                logging.warning(f"Error reading schema for spider {spider}: {e}")
         return list(set(dependencies))
 
     def get_spiders_by_job(self, job_name: str) -> list[str]:

@@ -164,7 +164,7 @@ class TushareIntegrationSettings(BaseSettings):
 
 # 保持scrapy兼容
 for key, value in (
-    TushareIntegrationSettings.model_validate(yaml.safe_load(open('config.yaml', 'r', encoding='utf-8').read()))
+    TushareIntegrationSettings.model_validate(yaml.safe_load(open('config_prod.yaml', 'r', encoding='utf-8').read()))
     .get_settings()
     .items()
 ):

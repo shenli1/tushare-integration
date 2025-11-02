@@ -7,6 +7,7 @@ import requests
 import scrapy
 import yaml
 
+from tushare_integration.constants import DEFAULT_START_DATE
 from tushare_integration.db_engine import DatabaseEngineFactory, DBEngine
 from tushare_integration.items import TushareIntegrationItem
 from tushare_integration.settings import TushareIntegrationSettings
@@ -29,7 +30,7 @@ class TushareSpider(scrapy.Spider):
     def from_crawler(cls, crawler, *args, **kwargs):
         spider = super().from_crawler(crawler, *args, **kwargs)
         spider.spider_settings = TushareIntegrationSettings.model_validate(
-            yaml.safe_load(open('config.yaml', 'r', encoding='utf8').read())
+            yaml.safe_load(open('config_prod.yaml', 'r', encoding='utf8').read())
         )
         spider.create_table()
         return spider
@@ -137,7 +138,7 @@ class DailySpider(TushareSpider):
     custom_settings = {"TABLE_NAME": "daily", "TRADE_DATE_FIELD": "trade_date"}
 
     def start_requests(self):
-        min_cal_date = self.custom_settings.get("MIN_CAL_DATE", '1970-01-01')
+        min_cal_date = self.custom_settings.get("MIN_CAL_DATE", DEFAULT_START_DATE)
         conn = self.get_db_engine()
         db_name = self.spider_settings.database.db_name
 
