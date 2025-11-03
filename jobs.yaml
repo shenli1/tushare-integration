@@ -166,7 +166,7 @@ cronjob:
       - name: stock/quotes/ggt_daily
       - name: stock/quotes/bak_daily
       # Stock Basic
-      - name: stock/basic/stk_premarket
+      #- name: stock/basic/stk_premarket
       # Stock Market
       - name: stock/market/margin_secs
       - name: stock/market/top_list
