@@ -153,33 +153,101 @@ class DailySpider(TushareSpider):
     name: str
     custom_settings = {"TABLE_NAME": "daily", "TRADE_DATE_FIELD": "trade_date"}
 
+    # 固定的空数据日期记录表名，所有接口共用
+    EMPTY_DATES_TABLE = "empty_data_dates"
+
+    def open_spider(self):
+        """在spider打开时创建空数据日期记录表"""
+        try:
+            conn = self.get_db_engine()
+            db_name = self.spider_settings.database.db_name
+            
+            conn.query_df(f"""
+                CREATE TABLE IF NOT EXISTS {db_name}.{self.EMPTY_DATES_TABLE} (
+                    trade_date DATE PRIMARY KEY,
+                    spider_name VARCHAR(255),
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            logging.info(f"Spider {self.name} 空数据日期记录表已准备就绪")
+        except Exception as e:
+            logging.warning(f"Spider {self.name} 创建空数据日期记录表时出错: {e}")
+
     def start_requests(self):
-        min_cal_date = self.custom_settings.get("MIN_CAL_DATE", DEFAULT_START_DATE)
-        conn = self.get_db_engine()
-        db_name = self.spider_settings.database.db_name
+        try:
+            min_cal_date = self.custom_settings.get("MIN_CAL_DATE", DEFAULT_START_DATE)
+            conn = self.get_db_engine()
+            db_name = self.spider_settings.database.db_name
 
-        cal_dates = conn.query_df(
-            f"""
-                SELECT DISTINCT cal_date
-                FROM {db_name}.trade_cal
-                WHERE cal_date NOT IN (SELECT `{self.custom_settings.get('TRADE_DATE_FIELD', 'trade_date')}` FROM {db_name}.{self.get_table_name()})
-                  AND is_open = 1
-                  AND cal_date >= '{min_cal_date}'
-                  AND cal_date <= today()
-                  AND exchange = 'SSE'
-                ORDER BY cal_date
-                """  # 期货交易日历共享同一张表，所以这里过滤SSE
-        )
-
-        if cal_dates.empty:
-            return
-
-        trade_dates = [cal_date.strftime("%Y%m%d") for cal_date in cal_dates["cal_date"]]
-
-        for trade_date in trade_dates:
-            yield self.get_scrapy_request(
-                params={self.custom_settings.get('TRADE_DATE_FIELD', 'trade_date'): trade_date}
+            # 查询需要获取数据的交易日，排除已有数据和已知空数据的日期
+            empty_dates_table = "empty_data_dates"
+            cal_dates = conn.query_df(
+                f"""
+                    SELECT DISTINCT cal_date
+                    FROM {db_name}.trade_cal
+                    WHERE cal_date NOT IN (SELECT `{self.custom_settings.get('TRADE_DATE_FIELD', 'trade_date')}` FROM {db_name}.{self.get_table_name()})
+                      AND is_open = 1
+                      AND cal_date >= '{min_cal_date}'
+                      AND cal_date <= today()
+                      AND exchange = 'SSE'
+                      AND cal_date NOT IN (
+                          SELECT trade_date 
+                              FROM {db_name}.{empty_dates_table} 
+                              WHERE spider_name = '{self.name}'
+                      )
+                    ORDER BY cal_date
+                    """  # 期货交易日历共享同一张表，所以这里过滤SSE
             )
+
+            if cal_dates.empty:
+                return
+
+            trade_dates = [cal_date.strftime("%Y%m%d") for cal_date in cal_dates["cal_date"]]
+
+            for trade_date in trade_dates:
+                yield self.get_scrapy_request(
+                    params={self.custom_settings.get('TRADE_DATE_FIELD', 'trade_date'): trade_date},
+                    meta={'trade_date': trade_date}
+                )
+        except Exception as e:
+            logging.error(f"Spider {self.name} 在start_requests中出错: {e}")
+            logging.exception("异常详细信息:")
+            raise
+
+    def parse(self, response, **kwargs):
+        try:
+            item = self.parse_response(response, **kwargs)
+            trade_date = kwargs.get('trade_date', response.meta.get('trade_date', ''))
+
+            if item['data'] is None or len(item['data']) == 0:
+                # 记录返回空数据的日期
+                logging.warning(f"Spider {self.name} {trade_date} 获取的数据为空，记录该日期")
+                try:
+                    conn = self.get_db_engine()
+                    db_name = self.spider_settings.database.db_name
+                    # 使用固定的空数据日期记录表名，所有接口共用
+                    empty_dates_table = "empty_data_dates"
+                    
+                    # 创建DataFrame用于插入
+                    empty_data = pd.DataFrame({
+                        'trade_date': [pd.to_datetime(trade_date, format='%Y%m%d').date()],
+                        'spider_name': [self.name],
+                        'create_time': [datetime.datetime.now()]
+                    })
+                    
+                    # 使用insert方法插入数据（ClickHouse会自动处理重复）
+                    conn.insert(empty_dates_table, schema={'primary_key': ['trade_date', 'spider_name']}, data=empty_data)
+                    logging.info(f"Spider {self.name} 记录空数据日期: {trade_date}")
+                except Exception as e:
+                    logging.error(f"Spider {self.name} 记录空数据日期时出错: {e}")
+                return
+
+            logging.info(f"Spider {self.name} {trade_date} 获取到 {len(item['data'])} 条数据")
+            return item
+        except Exception as e:
+            logging.error(f"Spider {self.name} 解析响应时出错: {e}")
+            raise
 
 
 class TSCodeSpider(TushareSpider):

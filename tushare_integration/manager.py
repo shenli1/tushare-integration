@@ -129,26 +129,52 @@ class CrawlManager(object):
             deferred.addCallback(lambda _: self.run_spiders_in_sequence(spiders[1:]))
 
     def run_job(self, job_name: str):
-        spiders = self.get_spiders_by_job(job_name)
-        all_spiders = self.get_all_spiders(spiders)
-
-        self.run_spiders_in_sequence(all_spiders)
-        self.process.start()
-
-        self.report()
-        # 如果有异常就抛出
-        self.raise_for_signal()
+        try:
+            logging.info(f"开始运行job: {job_name}")
+            spiders = self.get_spiders_by_job(job_name)
+            all_spiders = self.get_all_spiders(spiders)
+            
+            logging.info(f"Job {job_name} 包含 {len(all_spiders)} 个spider: {all_spiders}")
+            
+            self.run_spiders_in_sequence(all_spiders)
+            self.process.start()
+            
+            try:
+                self.report()
+                logging.info(f"Job {job_name} 运行完成")
+            except Exception as e:
+                logging.error(f"Job {job_name} 发送报告时出错: {e}")
+                
+            # 检查是否有异常信号
+            self.raise_for_signal()
+        except Exception as e:
+            logging.error(f"运行job {job_name} 时发生异常: {e}")
+            logging.exception("异常详细信息:")
+            raise
 
     def run_spider(self, spider: str):
-        spiders = self.list_spiders(spider)
-        all_spiders = self.get_all_spiders(spiders)
-
-        self.run_spiders_in_sequence(all_spiders)
-        self.process.start()
-
-        self.report()
-        # 如果有异常就抛出
-        self.raise_for_signal()
+        try:
+            logging.info(f"开始运行spider: {spider}")
+            spiders = self.list_spiders(spider)
+            all_spiders = self.get_all_spiders(spiders)
+            
+            logging.info(f"Spider {spider} 包含 {len(all_spiders)} 个子spider: {all_spiders}")
+            
+            self.run_spiders_in_sequence(all_spiders)
+            self.process.start()
+            
+            try:
+                self.report()
+                logging.info(f"Spider {spider} 运行完成")
+            except Exception as e:
+                logging.error(f"Spider {spider} 发送报告时出错: {e}")
+                
+            # 检查是否有异常信号
+            self.raise_for_signal()
+        except Exception as e:
+            logging.error(f"运行spider {spider} 时发生异常: {e}")
+            logging.exception("异常详细信息:")
+            raise
 
     def get_all_spiders(self, spiders):
         dependencies = [spiders]

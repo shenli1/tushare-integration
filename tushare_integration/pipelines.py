@@ -207,6 +207,7 @@ class RecordLogPipeline(BasePipeline):
 
     def create_log_table(self):
         try:
+            # 创建tushare_integration_log表
             schema = {
                 'primary_key': ['batch_id'],
                 'columns': [
@@ -244,7 +245,31 @@ class RecordLogPipeline(BasePipeline):
             }
 
             self.db_engine.create_table(self.table_name, schema)
-            logging.info("日志表创建或验证成功")
+            
+            # 创建empty_data_dates表，用于记录返回空数据的日期
+            empty_dates_schema = {
+                'primary_key': ['trade_date', 'spider_name'],
+                'columns': [
+                    {
+                        'name': 'trade_date',
+                        'data_type': 'date',
+                        'comment': '交易日期',
+                    },
+                    {
+                        'name': 'spider_name',
+                        'data_type': 'str',
+                        'comment': '爬虫名称',
+                    },
+                    {
+                        'name': 'create_time',
+                        'data_type': 'datetime',
+                        'comment': '创建时间',
+                    },
+                ],
+            }
+            
+            self.db_engine.create_table("empty_data_dates", empty_dates_schema)
+            logging.info("空数据日期记录表创建成功")
         except Exception as e:
             logging.error(f"创建日志表时出错: {e}")
             raise
