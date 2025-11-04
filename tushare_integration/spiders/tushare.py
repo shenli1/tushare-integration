@@ -49,21 +49,37 @@ class TushareSpider(scrapy.Spider):
         yield self.get_scrapy_request()
 
     def parse(self, response, **kwargs):
-        item = self.parse_response(response, **kwargs)
+        try:
+            item = self.parse_response(response, **kwargs)
 
-        if item['data'] is None or len(item['data']) == 0:
-            return
+            if item['data'] is None or len(item['data']) == 0:
+                logging.warning(f"Spider {self.name} 获取的数据为空")
+                return
 
-        return item
+            logging.info(f"Spider {self.name} 获取到 {len(item['data'])} 条数据")
+            return item
+        except Exception as e:
+            logging.error(f"Spider {self.name} 解析响应时出错: {e}")
+            raise
 
     def parse_response(self, response, **kwargs):
-        resp = json.loads(response.text)
+        try:
+            resp = json.loads(response.text)
 
-        if resp["code"] != 0:
-            logging.error(f"Request {self.get_api_name()} failed: {resp['msg']}")
-            raise RuntimeError(resp['msg'])
+            if resp["code"] != 0:
+                logging.error(f"Spider {self.name} 请求 {self.get_api_name()} 失败: {resp['msg']}")
+                raise RuntimeError(resp['msg'])
 
-        return TushareIntegrationItem(data=pd.DataFrame(data=resp["data"]["items"], columns=resp["data"]["fields"]))
+            data_items = resp["data"]["items"]
+            data_fields = resp["data"]["fields"]
+            data_count = len(data_items)
+            
+            logging.info(f"Spider {self.name} API返回 {data_count} 条数据，字段: {data_fields}")
+            
+            return TushareIntegrationItem(data=pd.DataFrame(data=data_items, columns=data_fields))
+        except Exception as e:
+            logging.error(f"Spider {self.name} 解析API响应时出错: {e}")
+            raise
 
     def get_db_engine(self):
         return self.db_engine

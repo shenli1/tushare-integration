@@ -1,4 +1,5 @@
 import datetime
+import logging
 
 import pandas as pd
 
@@ -108,25 +109,42 @@ class IndexWeightSpider(DailySpider):
             yield request
 
     def parse(self, response, **kwargs):
-        first_page = self.parse_response(response, **kwargs)
-        if first_page["data"].empty:
-            return None
+        try:
+            trade_date = response.meta['trade_date']
+            logging.info(f"Spider {self.name} 开始解析 {trade_date} 的数据")
 
-        all_data = [first_page["data"]]
-        trade_date = response.meta['trade_date']
-        offset = 3000
-        limit = 3000
+            first_page = self.parse_response(response, **kwargs)
+            if first_page["data"].empty:
+                logging.warning(f"Spider {self.name} {trade_date} 第一页数据为空")
+                return None
 
-        while True:
-            parsed_data = self.request_with_requests(
-                params={'trade_date': trade_date, 'offset': offset, 'limit': limit}
-            )
-            if parsed_data["data"].empty:
-                break
-            all_data.append(parsed_data["data"])
-            offset += limit
+            first_count = len(first_page["data"])
+            logging.info(f"Spider {self.name} {trade_date} 第一页获取到 {first_count} 条数据")
 
-        return TushareIntegrationItem(data=pd.concat(all_data, ignore_index=True))
+            all_data = [first_page["data"]]
+            offset = 3000
+            limit = 3000
+            total_count = first_count
+
+            while True:
+                parsed_data = self.request_with_requests(
+                    params={'trade_date': trade_date, 'offset': offset, 'limit': limit}
+                )
+                if parsed_data["data"].empty:
+                    logging.info(f"Spider {self.name} {trade_date} 偏移量 {offset} 没有更多数据")
+                    break
+
+                page_count = len(parsed_data["data"])
+                total_count += page_count
+                logging.info(f"Spider {self.name} {trade_date} 偏移量 {offset} 获取到 {page_count} 条数据")
+                all_data.append(parsed_data["data"])
+                offset += limit
+
+            logging.info(f"Spider {self.name} {trade_date} 总共获取到 {total_count} 条数据")
+            return TushareIntegrationItem(data=pd.concat(all_data, ignore_index=True))
+        except Exception as e:
+            logging.error(f"Spider {self.name} 解析数据时出错: {e}")
+            raise
 
 
 class SzDailyInfoSpider(DailySpider):
