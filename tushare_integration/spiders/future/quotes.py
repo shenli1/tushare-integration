@@ -43,13 +43,18 @@ class FutHoldingSpider(DailySpider):
                         AND cal_date >= '{min_cal_dates[exchange]}'
                         AND cal_date <= today()
                         AND exchange = '{exchange}'
+                        AND cal_date NOT IN (
+                            SELECT trade_date 
+                            FROM empty_data_dates 
+                            WHERE spider_name = '{self.name}'
+                        )
                     ORDER BY cal_date
                                 """
                 )['cal_date']
             ]
 
             for trade_date in trade_dates:
-                yield self.get_scrapy_request(params={"trade_date": trade_date, "exchange": exchange})
+                yield self.get_scrapy_request(params={"trade_date": trade_date, "exchange": exchange}, meta={'trade_date': trade_date})
 
 
 class FutSettleSpider(DailySpider):

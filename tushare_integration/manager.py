@@ -192,7 +192,36 @@ class CrawlManager(object):
 
     def raise_for_signal(self):
         if self.signals:
-            raise Exception(f"Signals: {self.signals}")
+            error_messages = []
+            for scrapy_signal in self.signals:
+                signal_type = scrapy_signal['signal']
+                spider = scrapy_signal.get('spider')
+                spider_name = spider.name if spider else 'Unknown'
+                item = scrapy_signal.get('item')
+                response = scrapy_signal.get('response')
+                
+                if signal_type == scrapy.signals.item_error:
+                    error_msg = f"Spider {spider_name} 处理item时出错"
+                    if item and 'data' in item:
+                        data = item['data']
+                        if hasattr(data, '__len__'):
+                            error_msg += f"，数据条数: {len(data)}"
+                        else:
+                            error_msg += f"，数据: {data}"
+                    if response:
+                        error_msg += f"，响应URL: {response.url}"
+                    error_messages.append(error_msg)
+                elif signal_type == scrapy.signals.spider_error:
+                    error_msg = f"Spider {spider_name} 运行时出错"
+                    if response:
+                        error_msg += f"，响应URL: {response.url}"
+                    error_messages.append(error_msg)
+                else:
+                    error_messages.append(f"Spider {spider_name} 发生未知信号: {signal_type}")
+            
+            error_summary = "发现以下错误:\n" + "\n".join(f"  - {msg}" for msg in error_messages)
+            logging.error(error_summary)
+            raise Exception(error_summary)
 
     def get_report_content(self):
         content = f"批次ID：{self.batch_id}\n"

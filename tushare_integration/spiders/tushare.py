@@ -218,20 +218,38 @@ class DailySpider(TushareSpider):
     def parse(self, response, **kwargs):
         try:
             item = self.parse_response(response, **kwargs)
-            trade_date = kwargs.get('trade_date', response.meta.get('trade_date', ''))
+            # 从多个位置获取trade_date：kwargs -> meta -> params
+            trade_date = kwargs.get('trade_date') or response.meta.get('trade_date') or response.meta.get('params', {}).get('trade_date', '')
 
             if item['data'] is None or len(item['data']) == 0:
                 # 记录返回空数据的日期
                 logging.warning(f"Spider {self.name} {trade_date} 获取的数据为空，记录该日期")
+                
+                # 检查trade_date是否有效
+                if not trade_date:
+                    logging.warning(f"Spider {self.name} trade_date为空，跳过记录")
+                    return
+                
                 try:
                     conn = self.get_db_engine()
                     db_name = self.spider_settings.database.db_name
                     # 使用固定的空数据日期记录表名，所有接口共用
                     empty_dates_table = "empty_data_dates"
                     
+                    # 转换日期格式
+                    try:
+                        date_obj = pd.to_datetime(trade_date, format='%Y%m%d')
+                        if pd.isna(date_obj):
+                            logging.warning(f"Spider {self.name} 日期转换失败: {trade_date}")
+                            return
+                        date_value = date_obj.date()
+                    except Exception as e:
+                        logging.error(f"Spider {self.name} 日期转换失败: {trade_date}, 错误: {e}")
+                        return
+                    
                     # 创建DataFrame用于插入
                     empty_data = pd.DataFrame({
-                        'trade_date': [pd.to_datetime(trade_date, format='%Y%m%d').date()],
+                        'trade_date': [date_value],
                         'spider_name': [self.name],
                         'create_time': [datetime.datetime.now()]
                     })
@@ -241,6 +259,7 @@ class DailySpider(TushareSpider):
                     logging.info(f"Spider {self.name} 记录空数据日期: {trade_date}")
                 except Exception as e:
                     logging.error(f"Spider {self.name} 记录空数据日期时出错: {e}")
+                    logging.exception("详细错误信息:")
                 return
 
             logging.info(f"Spider {self.name} {trade_date} 获取到 {len(item['data'])} 条数据")
