@@ -1,5 +1,6 @@
 import importlib
 import logging
+import os
 
 import requests
 
@@ -19,31 +20,40 @@ class FeishuWebHookReporter(Reporter):
             logging.info('No feishu webhook, skip send report')
             return
 
-            # 将content按照\n分割
+        # 将content按照\n分割，构建消息内容
+        content_lines = []
+        for line in content.split('\n'):
+            if line.strip():  # 跳过空行
+                content_lines.append([{"text": line, "tag": "text"}])
+        
         body = {
             "msg_type": "post",
             "content": {
                 "post": {
                     "zh_cn": {
                         "title": subject,
-                        "content": [[{"text": f'{_}\n', "tag": "text"} for _ in content.split('\n')]],
+                        "content": content_lines,
                     }
                 }
             },
         }
 
-        # 找到最后一个content，移除掉末尾的\n
-        if body['content']['post']['zh_cn']['content'][-1][-1]['text'] == '\n':
-            body['content']['post']['zh_cn']['content'][-1][-1]['text'] = body['content']['post']['zh_cn']['content'][
-                -1
-            ][-1]['text'][:-1]
-
-        resp = requests.post(self.webhook, json=body)
-        logging.info(f'Send report to feishu webhook, status code: {resp.status_code}, response: {resp.text}')
+        try:
+            resp = requests.post(self.webhook, json=body, timeout=10)
+            resp.raise_for_status()
+            logging.info(f'发送报告到飞书Webhook成功，状态码: {resp.status_code}')
+            return True
+        except requests.exceptions.RequestException as e:
+            logging.error(f'发送报告到飞书Webhook失败: {e}')
+            if hasattr(e, 'response') and e.response is not None:
+                logging.error(f'响应内容: {e.response.text}')
+            return False
 
     @classmethod
     def from_settings(cls, settings):
-        return cls(webhook=settings.get('FEISHU_WEBHOOK'))
+        # 优先从环境变量读取FEISHU_WEBHOOK，支持从.env文件读取
+        webhook = os.environ.get('FEISHU_WEBHOOK', '') or settings.get('FEISHU_WEBHOOK', '')
+        return cls(webhook=webhook)
 
 
 class ReporterLoader(object):

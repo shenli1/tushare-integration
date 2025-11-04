@@ -61,7 +61,7 @@ class DatabaseConfig(BaseSettings):
         else:
             raise ValueError(f"Unsupported db_type: {self.db_type}")
 
-    model_config = SettingsConfigDict(extra='ignore')
+    model_config = SettingsConfigDict(extra='ignore', env_file='.env', env_file_encoding='utf-8')
 
 
 # 使用pydantic定义数据模型
@@ -77,7 +77,7 @@ class TushareIntegrationSettings(BaseSettings):
     database: DatabaseConfig = Field(..., description='数据库配置')
 
     reporters: list[str] = Field([], description='报告模块')
-    feishu_webhook: Annotated[str, env_variable('FEISHU_WEBHOOK')] = Field(..., description='飞书webhook')
+    feishu_webhook: Annotated[str, env_variable('FEISHU_WEBHOOK')] = Field('', description='飞书webhook，优先从.env文件读取')
 
     parallel_mode: bool = Field(
         default=False, title='是否开启并行模式', description='并行模式下将会关闭自动依赖解析，用户需要自行处理任务依赖'
@@ -132,7 +132,7 @@ class TushareIntegrationSettings(BaseSettings):
 
     closespider_errorcount: int = Field(default=1, description='错误数量')
 
-    model_config = SettingsConfigDict(extra='ignore')
+    model_config = SettingsConfigDict(extra='ignore', env_file='.env', env_file_encoding='utf-8')
 
     def get_frequency(self):
         frequency = 0
@@ -159,7 +159,8 @@ class TushareIntegrationSettings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ):
-        return env_settings, init_settings, file_secret_settings
+        # 优先从.env文件读取，然后从环境变量，最后从配置文件
+        return dotenv_settings, env_settings, init_settings, file_secret_settings
 
 
 # 保持scrapy兼容

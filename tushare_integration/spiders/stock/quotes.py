@@ -36,6 +36,11 @@ class StockWeeklySpider(TushareSpider):
                 WHERE is_open = 1
                     AND cal_date <= today()
                     AND exchange = 'SSE'
+                    AND cal_date NOT IN (
+                        SELECT trade_date 
+                        FROM {db_name}.empty_data_dates 
+                        WHERE spider_name = '{self.name}'
+                    )
                 ORDER BY cal_date
                 """
         )

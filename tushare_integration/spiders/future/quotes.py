@@ -1,4 +1,5 @@
 import datetime
+import logging
 
 from tushare_integration.spiders.tushare import DailySpider
 
@@ -78,18 +79,33 @@ class FutWeeklyDetail(DailySpider):
 
     # 这个接口设计比较奇特，使用的是周编号，而不是日期，周编号格式是YYYYWW，比如202001
     def start_requests(self):
-        # 取出来所有的周编号
-        df = self.get_db_engine().query_df(
-            f"""
-            SELECT DISTINCT `week`
-            FROM {self.get_table_name()}
-            ORDER BY `week` DESC
-            """
-        )
-        # 生成历史所有的周编号，从201010开始
-        weeks = [str(y) + str(w).zfill(2) for y in range(2010, datetime.datetime.now().year + 1) for w in range(1, 53)]
-        # 去掉已经采集的周编号
-        weeks = list(set(weeks) - set(df['week'].tolist()))
-        # 生成请求
-        for week in weeks:
-            yield self.get_scrapy_request(params={"week": week})
+        try:
+            # 取出来所有的周编号
+            df = self.get_db_engine().query_df(
+                f"""
+                SELECT DISTINCT `week`
+                FROM {self.get_table_name()}
+                ORDER BY `week` DESC
+                """
+            )
+            
+            # 检查DataFrame是否为空或没有week列
+            if df.empty or 'week' not in df.columns:
+                existing_weeks = []
+            else:
+                existing_weeks = df['week'].tolist()
+            
+            # 生成历史所有的周编号，从201010开始
+            weeks = [str(y) + str(w).zfill(2) for y in range(2010, datetime.datetime.now().year + 1) for w in range(1, 53)]
+            # 去掉已经采集的周编号
+            weeks = list(set(weeks) - set(existing_weeks))
+            
+            logging.info(f"Spider {self.name} 需要采集 {len(weeks)} 个周编号")
+            
+            # 生成请求
+            for week in weeks:
+                yield self.get_scrapy_request(params={"week": week})
+        except Exception as e:
+            logging.error(f"Spider {self.name} 在start_requests中出错: {e}")
+            logging.exception("异常详细信息:")
+            raise
